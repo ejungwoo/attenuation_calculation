@@ -1,66 +1,33 @@
-#ifndef LILAK_VERSION 
-#include "LKCompiled.h"
-#include "LKMisc.cpp"
-#include "LKPainter.cpp"
-#include "LKDrawing.cpp"
-#include "LKDrawingGroup.cpp"
-#endif
-TGraph* NewGraph(TString name="graph", int mst=20, double msz=0.6, int mcl=kBlack, int lst=-1, int lsz=-1, int lcl=-1);
-TGraphErrors* NewGraphErrors(TString name="graph", int mst=20, double msz=0.6, int mcl=kBlack, int lst=-1, int lsz=-1, int lcl=-1);
-double CircleIntersectionArea(double x1, double y1, double r1, double x2, double y2, double r2);
-double Gaussian2D(double x, double y, double xc, double yc, double sigmaX, double sigmaY);
-double IntegrateGaussian2D(double xc, double yc, double sigmaX, double sigmaY, double x0, double y0, double r0, int nPoints=100);
-double IntegrateGaussian2DFast(double xc, double yc, double sigmaX, double sigmaY, double x0, double y0, double r0, int nPoints=100);
-double IntegrateGaussian2D_SumGamma(double sigma, double cx, double r0);
-double IntegrateGaussian2DFaster(double xc, double yc, double sigmaX, double sigmaY, double x0, double y0, double r0);
-const int kUniformBeamProfile = 0;
-const int kGauss2DBeamProfile = 1;
-int fBeamTypeList[] = {kGauss2DBeamProfile, kUniformBeamProfile};
-const char* BeamTypeString(int beam_type);
-class AttenuatorSimulationInput {
-    public:
-        int constant;
-        int exponent;
-        int numbering;
-        double beam_radius;
-        double hole_diameter;
-        double attenuation;
-        AttenuatorSimulationInput(int f, int e, double d, double r)
-        : constant(f), exponent(e), hole_diameter(d), beam_radius(r) {
-            attenuation = constant * std::pow(10.0, exponent);
-            numbering = constant*100 + (-exponent);
-        }
-};
+#include "functions.h"
 
-/////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////
 void attenuation_calculation()
 {
-    bool draw_count_histogram_together = true;
-
     int constant, exponent;
     double hole_diameter, beam_diameter;
     vector<AttenuatorSimulationInput> attenuator_list = {
         //AttenuatorSimulationInput(constant=1, exponent=-3, hole_diameter=0.12, beam_diameter=5),
-        //AttenuatorSimulationInput(constant=1, exponent=-3, hole_diameter=0.12, beam_diameter=10),
+        AttenuatorSimulationInput(constant=1, exponent=-3, hole_diameter=0.12, beam_diameter=10),
         //AttenuatorSimulationInput(constant=5, exponent=-3, hole_diameter=0.12, beam_diameter=5),
-        //AttenuatorSimulationInput(constant=5, exponent=-3, hole_diameter=0.12, beam_diameter=10),
+        AttenuatorSimulationInput(constant=5, exponent=-3, hole_diameter=0.12, beam_diameter=10),
         AttenuatorSimulationInput(constant=1, exponent=-5, hole_diameter=0.03, beam_diameter=10),
     };
 
     /////////////////////////////////////////////////////////////////////
 
+    bool draw_count_histogram_together = true;
+    bool use_larger_beam_center_range = true;
+
     double attenuator_dx = 40; // width of active attenuator aread (mm)
-    double attenuator_half = 0.5*attenuator_dx;
     double attenuator_active_dx = 36; // width of active attenuator area (mm)
     double attenuator_active_dy = 36; // height of active attenuator area (mm)
-    double attenuator_radius = 0.5*attenuator_active_dx; // radius of active attenuator area (mm)
     double efficiency_range = 0.30;
     double beam_radius_to_sigma = 1./3;
     int sample_ndivision_x = 200;
     int sample_ndivision_y = 200;
-    int rmdr = 1; // ??
+    int grid_type = 0; // 0,1,2
+
+    double attenuator_half = 0.5*attenuator_dx;
+    double attenuator_radius = 0.5*attenuator_active_dx; // radius of active attenuator area (mm)
 
     /////////////////////////////////////////////////////////////////////
 
@@ -90,9 +57,9 @@ void attenuation_calculation()
         auto draw_attenuator_sketch = drawings -> CreateDrawing(Form("draw_%d_%d_1_%d",at.numbering,beam_size_number,int(draw_count_histogram_together)));
 
         TString hname = Form("hist_%dEm%d_h%d_s%d",at.constant,at.exponent,int(100*at.hole_diameter),beam_size_number);
-        auto hist = new TH2D(hname,";x (mm);y (mm)",100,0,attenuator_dx,100,0,attenuator_dx);
-        hist -> SetStats(0);
-        draw_attenuator_sketch -> Add(hist);
+        auto hist_attenuator = new TH2D(hname,";x (mm);y (mm)",100,0,attenuator_dx,100,0,attenuator_dx);
+        hist_attenuator -> SetStats(0);
+        draw_attenuator_sketch -> Add(hist_attenuator);
 
         auto graph_holes = NewGraph("graph_holes", 24, (at.exponent<3?0.3:0.4), kBlack);
         auto graph_active_boundary = NewGraph("graph_active_boundary");
@@ -134,7 +101,7 @@ void attenuation_calculation()
             for (auto ix=0; ix<nx; ++ix)
             {
                 double xh = xi + ix*x_dist;
-                if (iy%2==rmdr) xh = xh + 0.5*x_dist;
+                if (iy%2==grid_type) xh = xh + 0.5*x_dist;
                 if (xh>x0+attenuator_active_dx) continue;
                 if ((attenuator_half-xh)*(attenuator_half-xh)+(attenuator_half-yh)*(attenuator_half-yh)>attenuator_radius*attenuator_radius) continue;
                 if (firstX) {
@@ -153,44 +120,46 @@ void attenuation_calculation()
         draw_attenuator_sketch -> Add(graph_holes,"samep");
 
         TString title = Form("A=%dx10^{%d}, #phi_{hole}=%.2f, n_{hole}=%d, r_{beam}=%d",at.constant,at.exponent,at.hole_diameter,int(points.size()),beam_size_number);
-        hist -> SetTitle(title);
+        hist_attenuator -> SetTitle(title);
 
-        auto draw_efficiency = drawings -> CreateDrawing(Form("draw_%d_%d_1d_%d",at.numbering,beam_size_number,int(draw_count_histogram_together)),draw_count_histogram_together);
-        draw_efficiency -> SetCanvasMargin(0.12,0.12,0.12,0.12);
-        draw_efficiency -> SetPaveDx(0.5);
-        draw_efficiency -> SetPaveLineDy(0.06);
-        draw_efficiency -> SetStatsFillStyle(0);
-        draw_efficiency -> SetLegendBelowStats();
-        auto lgTG = new TLegend();
-        lgTG -> AddEntry((TObject*)0,Form("%dx10^{%d}, #phi=%.2f, r=%d",at.constant,at.exponent,at.hole_diameter,beam_size_number),"");
-        lgTG -> SetFillStyle(0);
+        auto draw_efficiency_all = drawings -> CreateDrawing(Form("draw_%d_%d_1d_%d",at.numbering,beam_size_number,int(draw_count_histogram_together)),draw_count_histogram_together);
+        draw_efficiency_all -> SetCanvasMargin(0.12,0.12,0.12,0.12);
+        draw_efficiency_all -> SetPaveDx(0.5);
+        draw_efficiency_all -> SetPaveLineDy(0.06);
+        draw_efficiency_all -> SetStatsFillStyle(0);
+        draw_efficiency_all -> SetLegendBelowStats();
+        auto lg_efficiency_all = new TLegend();
+        lg_efficiency_all -> AddEntry((TObject*)0,Form("%dx10^{%d}, #phi=%.2f, r=%d",at.constant,at.exponent,at.hole_diameter,beam_size_number),"");
+        lg_efficiency_all -> SetFillStyle(0);
 
         vector<TH1D*> hist_efficiency_list;
         for (auto beam_type : fBeamTypeList)
         {
-            auto drawAttnRatio = drawings -> CreateDrawing(Form("draw_%d_%d_2d_%s_%d",at.numbering,beam_size_number,BeamTypeString(beam_type),int(draw_count_histogram_together)),draw_count_histogram_together);
-            drawAttnRatio -> SetCanvasMargin(0.115,0.14,0.125,0.13);
+            auto draw_efficiency_2d = drawings -> CreateDrawing(Form("draw_%d_%d_2d_%s_%d",at.numbering,beam_size_number,BeamTypeString(beam_type),int(draw_count_histogram_together)),draw_count_histogram_together);
+            draw_efficiency_2d -> SetCanvasMargin(0.115,0.14,0.125,0.13);
 
-            auto graphCircle0 = NewGraph("graphCircle0",20,0.6,kBlue);
-            auto graphCircleR = NewGraph("graphCircleR"); graphCircleR -> SetLineColor(kBlue);
-            auto graphCircle3 = NewGraph("graphCircle3"); graphCircle3 -> SetLineColor(kRed);
-            auto graphCircle2 = NewGraph("graphCircle2"); graphCircle2 -> SetLineColor(kRed);
-            auto graphCircle1 = NewGraph("graphCircle1"); graphCircle1 -> SetLineColor(kRed);
-            auto graphSimCenter = NewGraph("graphSimCenter");
-            auto graphSimCenterRange = NewGraph("graphSimCenterRange");
-            //double xs1 = attenuator_half - 0.5*x_dist;
-            //double xs2 = attenuator_half + 0.5*x_dist;
-            //double ys1 = attenuator_half - 0.5*y_dist;
-            //double ys2 = attenuator_half + 0.5*y_dist;
-            double xs1 = attenuator_half - 1.0*x_dist;
-            double xs2 = attenuator_half + 1.0*x_dist;
-            double ys1 = attenuator_half - 1.0*y_dist;
-            double ys2 = attenuator_half + 1.0*y_dist;
-            graphSimCenterRange -> SetPoint(0,xs1,ys1);
-            graphSimCenterRange -> SetPoint(1,xs1,ys2);
-            graphSimCenterRange -> SetPoint(2,xs2,ys2);
-            graphSimCenterRange -> SetPoint(3,xs2,ys1);
-            graphSimCenterRange -> SetPoint(4,xs1,ys1);
+            auto graph_circle_0 = NewGraph("graph_circle_0",20,0.6,kBlue);
+            auto graph_circle_r = NewGraph("graph_circle_r"); graph_circle_r -> SetLineColor(kBlue);
+            auto graph_circle_3 = NewGraph("graph_circle_3"); graph_circle_3 -> SetLineColor(kRed);
+            auto graph_circle_2 = NewGraph("graph_circle_2"); graph_circle_2 -> SetLineColor(kRed);
+            auto graph_circle_1 = NewGraph("graph_circle_1"); graph_circle_1 -> SetLineColor(kRed);
+            auto graph_sim_center = NewGraph("graph_sim_center");
+            auto graph_sim_center_range = NewGraph("graph_sim_center_range");
+            double xs1 = attenuator_half - 0.5*x_dist;
+            double xs2 = attenuator_half + 0.5*x_dist;
+            double ys1 = attenuator_half - 0.5*y_dist;
+            double ys2 = attenuator_half + 0.5*y_dist;
+            if (use_larger_beam_center_range) {
+                xs1 = attenuator_half - 1.0*x_dist;
+                xs2 = attenuator_half + 1.0*x_dist;
+                ys1 = attenuator_half - 1.0*y_dist;
+                ys2 = attenuator_half + 1.0*y_dist;
+            }
+            graph_sim_center_range -> SetPoint(0,xs1,ys1);
+            graph_sim_center_range -> SetPoint(1,xs1,ys2);
+            graph_sim_center_range -> SetPoint(2,xs2,ys2);
+            graph_sim_center_range -> SetPoint(3,xs2,ys1);
+            graph_sim_center_range -> SetPoint(4,xs1,ys1);
             int count = 0;
             TString hname = Form("hist_%dEm%d_h%d_s%d",at.constant,at.exponent,int(100*at.hole_diameter),beam_size_number);
             TString title = Form("A=%dx10^{%d}, #phi=%.2f, n_{hole}=%d, r_{beam}=%d",at.constant,at.exponent,at.hole_diameter,int(points.size()),beam_size_number);
@@ -232,35 +201,35 @@ void attenuation_calculation()
 
                     if ((ix==0 && iy==0))
                     {
-                        graphCircle0 -> SetPoint(graphCircle0->GetN(),x1,y1);
+                        graph_circle_0 -> SetPoint(graph_circle_0->GetN(),x1,y1);
                         for (auto i=0; i<=100; ++i) {
-                            graphCircleR -> SetPoint(graphCircleR->GetN(), at.beam_radius*3*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*3*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
+                            graph_circle_r -> SetPoint(graph_circle_r->GetN(), at.beam_radius*3*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*3*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
                         }
                     }
                     else if ((ix==sample_ndivision_x-1 && iy==sample_ndivision_y-1))
                     {
                         for (auto i=0; i<=100; ++i) {
-                            graphCircle3 -> SetPoint(graphCircle3->GetN(), at.beam_radius*3*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*3*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
-                            graphCircle2 -> SetPoint(graphCircle2->GetN(), at.beam_radius*2*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*2*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
-                            graphCircle1 -> SetPoint(graphCircle1->GetN(), at.beam_radius*1*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*1*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
+                            graph_circle_3 -> SetPoint(graph_circle_3->GetN(), at.beam_radius*3*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*3*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
+                            graph_circle_2 -> SetPoint(graph_circle_2->GetN(), at.beam_radius*2*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*2*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
+                            graph_circle_1 -> SetPoint(graph_circle_1->GetN(), at.beam_radius*1*beam_radius_to_sigma*cos(i*TMath::Pi()/50)+x1, at.beam_radius*1*beam_radius_to_sigma*sin(i*TMath::Pi()/50)+y1);
                         }
                     }
-                    graphSimCenter -> SetPoint(graphSimCenter->GetN(),x1,y1);
+                    graph_sim_center -> SetPoint(graph_sim_center->GetN(),x1,y1);
                     count++;
                 }
             }
-            graphSimCenterRange -> SetLineColor(kCyan+1);
-            draw_attenuator_sketch -> Add(graphSimCenterRange,"samel");
-            graphSimCenter -> SetMarkerStyle(20);
-            graphSimCenter -> SetMarkerSize(0.6);
-            graphSimCenter -> SetMarkerColor(kRed);
-            if (beam_type==kUniformBeamProfile) draw_attenuator_sketch -> Add(graphCircle0,"samel");
-            if (beam_type==kUniformBeamProfile) draw_attenuator_sketch -> Add(graphCircleR,"samel");
-            if (beam_type==kGauss2DBeamProfile) draw_attenuator_sketch -> Add(graphCircle3,"samel");
-            if (beam_type==kGauss2DBeamProfile) draw_attenuator_sketch -> Add(graphCircle2,"samel");
-            if (beam_type==kGauss2DBeamProfile) draw_attenuator_sketch -> Add(graphCircle1,"samel");
+            graph_sim_center_range -> SetLineColor(kCyan+1);
+            draw_attenuator_sketch -> Add(graph_sim_center_range,"samel");
+            graph_sim_center -> SetMarkerStyle(20);
+            graph_sim_center -> SetMarkerSize(0.6);
+            graph_sim_center -> SetMarkerColor(kRed);
+            if (beam_type==kUniformBeamProfile) draw_attenuator_sketch -> Add(graph_circle_0,"samel");
+            if (beam_type==kUniformBeamProfile) draw_attenuator_sketch -> Add(graph_circle_r,"samel");
+            if (beam_type==kGauss2DBeamProfile) draw_attenuator_sketch -> Add(graph_circle_3,"samel");
+            if (beam_type==kGauss2DBeamProfile) draw_attenuator_sketch -> Add(graph_circle_2,"samel");
+            if (beam_type==kGauss2DBeamProfile) draw_attenuator_sketch -> Add(graph_circle_1,"samel");
 
-            drawAttnRatio -> Add(histSampleCount2,"colz");
+            draw_efficiency_2d -> Add(histSampleCount2,"colz");
 
             auto pv = new TPaveText();
             pv -> SetFillColor(0);
@@ -269,181 +238,44 @@ void attenuation_calculation()
             pv -> SetTextAlign(33);
             if (beam_type==kUniformBeamProfile) pv -> AddText("Uniform distribution");
             if (beam_type==kGauss2DBeamProfile) pv -> AddText("2d-Gaus distribution");
-            drawAttnRatio -> Add(pv);
-            drawAttnRatio -> SetPaveCorner(0);
+            draw_efficiency_2d -> Add(pv);
+            draw_efficiency_2d -> SetPaveCorner(0);
 
-            if (beam_type==kUniformBeamProfile) lgTG -> AddEntry(hist_efficiency,Form("Uniform (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
-            if (beam_type==kGauss2DBeamProfile) lgTG -> AddEntry(hist_efficiency,Form("2d-Gaus (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
+            if (beam_type==kUniformBeamProfile) lg_efficiency_all -> AddEntry(hist_efficiency,Form("Uniform (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
+            if (beam_type==kGauss2DBeamProfile) lg_efficiency_all -> AddEntry(hist_efficiency,Form("2d-Gaus (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
 
-            auto lg1d = new TLegend();
-            lg1d -> AddEntry((TObject*)0,Form("=%dx10^{%d}, #phi=%.2f, r=%d",at.constant,at.exponent,at.hole_diameter,beam_size_number),"");
-            lg1d -> SetFillStyle(0);
-            if (beam_type==kUniformBeamProfile) lg1d -> AddEntry(hist_efficiency,Form("Uniform (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
-            if (beam_type==kGauss2DBeamProfile) lg1d -> AddEntry(hist_efficiency,Form("2d-Gaus (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
+            auto lg_efficiency_1d = new TLegend();
+            lg_efficiency_1d -> AddEntry((TObject*)0,Form("=%dx10^{%d}, #phi=%.2f, r=%d",at.constant,at.exponent,at.hole_diameter,beam_size_number),"");
+            lg_efficiency_1d -> SetFillStyle(0);
+            if (beam_type==kUniformBeamProfile) lg_efficiency_1d -> AddEntry(hist_efficiency,Form("Uniform (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
+            if (beam_type==kGauss2DBeamProfile) lg_efficiency_1d -> AddEntry(hist_efficiency,Form("2d-Gaus (#mu=%.3f,#sigma=%.4f)",hist_efficiency->GetMean(),hist_efficiency->GetStdDev()),"l");
 
-            auto draw1d = drawings -> CreateDrawing(Form("draw_%d_%d_1d_%s_%d",at.numbering,beam_size_number,BeamTypeString(beam_type),int(draw_count_histogram_together)),!draw_count_histogram_together);
-            draw1d -> SetCanvasMargin(0.12,0.12,0.12,0.12);
-            draw1d -> SetPaveDx(1);
-            draw1d -> SetPaveLineDy(0.05);
-            draw1d -> SetStatsFillStyle(0);
-            draw1d -> SetLegendBelowStats();
-            //cout << hist_efficiency << endl;
-            //if (draw1d -> GetEntries()==0)
-            draw1d -> Add(hist_efficiency);
-            //else
-            //    draw1d -> Add(hist_efficiency,"same");
-            draw1d -> Add(lg1d);
+            auto draw_efficiency_1d = drawings -> CreateDrawing(Form("draw_%d_%d_1d_%s_%d",at.numbering,beam_size_number,BeamTypeString(beam_type),int(draw_count_histogram_together)),!draw_count_histogram_together);
+            draw_efficiency_1d -> SetCanvasMargin(0.12,0.12,0.12,0.12);
+            draw_efficiency_1d -> SetPaveDx(1);
+            draw_efficiency_1d -> SetPaveLineDy(0.05);
+            draw_efficiency_1d -> SetStatsFillStyle(0);
+            draw_efficiency_1d -> SetLegendBelowStats();
+            draw_efficiency_1d -> Add(hist_efficiency);
+            draw_efficiency_1d -> Add(lg_efficiency_1d);
         }
 
         if (draw_count_histogram_together) {
             double max = 0;
             for (auto hist_efficiency : hist_efficiency_list) {
                 auto max1 = hist_efficiency -> GetMaximum();
-                cout << max1 << endl;
                 if (max1>max) max = max1;
             }
             for (auto hist_efficiency : hist_efficiency_list) {
                 hist_efficiency -> SetMaximum(1.05*max);
-                if (draw_efficiency->GetEntries()==0)
-                    draw_efficiency -> Add(hist_efficiency);
+                if (draw_efficiency_all->GetEntries()==0)
+                    draw_efficiency_all -> Add(hist_efficiency);
                 else
-                    draw_efficiency -> Add(hist_efficiency,"same");
+                    draw_efficiency_all -> Add(hist_efficiency,"same");
             }
+            draw_efficiency_all -> Add(lg_efficiency_all);
         }
-        draw_efficiency -> Add(lgTG);
     }
 
-    top -> Print();
     top -> Draw();
-}
-
-double CircleIntersectionArea(double x1, double y1, double r1, double x2, double y2, double r2)
-{
-    double d = std::sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
-    if (d >= r1 + r2) {
-        return 0.0;
-    }
-    if (d <= std::abs(r1 - r2)) {
-        double smallerRadius = std::min(r1, r2);
-        return M_PI * smallerRadius * smallerRadius;
-    }
-    double r1Squared = r1 * r1;
-    double r2Squared = r2 * r2;
-    double angle1 = std::acos((d * d + r1Squared - r2Squared) / (2 * d * r1));
-    double angle2 = std::acos((d * d + r2Squared - r1Squared) / (2 * d * r2));
-    double triangleArea = 0.5 * std::sqrt((-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2));
-    double segmentArea1 = r1Squared * angle1;
-    double segmentArea2 = r2Squared * angle2;
-    return segmentArea1 + segmentArea2 - triangleArea;
-}
-
-double Gaussian2D(double x, double y, double xc, double yc, double sigmaX, double sigmaY) {
-    double norm = 1.0 / (2 * TMath::Pi() * sigmaX * sigmaY);
-    double dx = (x - xc) / sigmaX;
-    double dy = (y - yc) / sigmaY;
-    return norm * TMath::Exp(-0.5 * (dx * dx + dy * dy));
-}
-
-//double IntegrateGaussian2D(double xc, double yc, double sigmaX, double sigmaY, double x0, double y0, double r0, int nPoints)
-//{
-//    double integral = 0.0;
-//    double dTheta = 2 * TMath::Pi() / nPoints; // Step size in angle
-//    double dr = r0 / nPoints; // Step size in radius
-//
-//    for (int i = 0; i < nPoints; ++i) {
-//        double r = i * dr;
-//        for (int j = 0; j < nPoints; ++j) {
-//            double theta = j * dTheta;
-//            double x = x0 + r * TMath::Cos(theta);
-//            double y = y0 + r * TMath::Sin(theta);
-//
-//            // Accumulate the Gaussian value at this point
-//            integral += Gaussian2D(x, y, xc, yc, sigmaX, sigmaY) * r * dr * dTheta;
-//        }
-//    }
-//
-//    return integral;
-//}
-
-double IntegrateGaussian2DFast(double xc, double yc, double sigmaX, double sigmaY, double x0, double y0, double r0, int nPoints)
-{
-    double cx = TMath::Sqrt((x0-xc)*(x0-xc) + (y0-yc)*(y0-yc));
-    return IntegrateGaussian2D_SumGamma(sigmaX, cx, r0);
-}
-
-double IntegrateGaussian2D_SumGamma(double sigma, double cx, double r0)
-{
-    cout << "cx = " << cx << endl;
-    cx = cx/sigma;
-    r0 = r0/sigma;
-    double valueSum = 0;
-    for (int k=0; k<4; ++k)
-    {
-        double k_factorial = TMath::Factorial(k);
-        double value_add = TMath::Power(cx*cx/2,k)/(k_factorial*k_factorial) * TMath::Gamma(k+1,r0*r0/2);
-        cout << k << ") " << TMath::Power(cx*cx/2,k) << " / " << (k_factorial*k_factorial) << " * " << TMath::Gamma(k+1,r0*r0/2) << " = " << value_add << endl;
-        valueSum += value_add;
-    }
-    cout << TMath::Exp(-cx*cx/2) << endl;
-    cout << TMath::Exp(-cx*cx/2) * valueSum << endl;
-    double integral = 1 - TMath::Exp(-cx*cx/2) * valueSum;
-    cout << integral << endl;
-    return integral;
-}
-
-double IntegrateGaussian2DFaster(double xc, double yc, double sigmaX, double sigmaY, double x0, double y0, double r0)
-{
-    double dx = (x0 - xc) / sigmaX;
-    double dy = (y0 - yc) / sigmaY;
-    double gaussianValue = (1.0 / (2 * TMath::Pi() * sigmaX * sigmaY)) *
-                           TMath::Exp(-0.5 * (dx * dx + dy * dy));
-    double circleArea = TMath::Pi() * r0 * r0;
-    return circleArea * gaussianValue;
-}
-
-TGraph *NewGraph(TString name, int mst, double msz, int mcl, int lst, int lsz, int lcl)
-{
-    auto graph = new TGraph();
-    graph -> SetName(name);
-    if (mst<=0) mst = 20;
-    if (msz<=0) msz = 1;
-    if (mcl<0) mcl = kBlack;
-    graph -> SetMarkerStyle(mst);
-    graph -> SetMarkerSize(msz);
-    graph -> SetMarkerColor(mcl);
-    if (lst<0) lst = 1;
-    if (lsz<0) lsz = 1;
-    if (lcl<0) lcl = mcl;
-    graph -> SetLineStyle(lst);
-    graph -> SetLineWidth(lsz);
-    graph -> SetLineColor(lcl);
-    graph -> SetFillStyle(0);
-    return graph;
-}
-
-TGraphErrors *NewGraphErrors(TString name, int mst, double msz, int mcl, int lst, int lsz, int lcl)
-{
-    auto graph = new TGraphErrors();
-    graph -> SetName(name);
-    if (mst<=0) mst = 20;
-    if (msz<=0) msz = 1;
-    if (mcl<0) mcl = kBlack;
-    graph -> SetMarkerStyle(mst);
-    graph -> SetMarkerSize(msz);
-    graph -> SetMarkerColor(mcl);
-    if (lst<0) lst = 1;
-    if (lsz<0) lsz = 1;
-    if (lcl<0) lcl = mcl;
-    graph -> SetLineStyle(lst);
-    graph -> SetLineWidth(lsz);
-    graph -> SetLineColor(lcl);
-    graph -> SetFillStyle(0);
-    return graph;
-}
-
-const char* BeamTypeString(int beam_type)
-{
-    if      (beam_type==kUniformBeamProfile) return "uniform";
-    else if (beam_type==kGauss2DBeamProfile) return "gauss2D";
-    return "no_beam_type";
 }
