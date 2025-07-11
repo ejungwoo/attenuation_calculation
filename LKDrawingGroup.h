@@ -58,7 +58,7 @@ class LKDrawingGroup : public TObjArray
         void WriteFile(TString fileName="", TString option="");
         void WriteFitParameterFile(TString tag="");
 
-        void Save(bool recursive=true, bool saveRoot=true, bool saveImage=true, TString dirName="", TString header="", TString tag="");
+        void Save(bool recursive=true, bool saveRoot=false, bool saveImage=true, TString dirName="", TString header="", TString tag="");
 
         virtual void Add(TObject *obj);
 

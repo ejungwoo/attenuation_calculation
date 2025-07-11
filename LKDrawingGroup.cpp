@@ -85,7 +85,7 @@ void LKDrawingGroup::Draw(Option_t *option)
 
 void LKDrawingGroup::WriteFitParameterFile(TString tag)
 {
-    Save(true,true,false,"data_lilak","",Form("FITPARAMETERS%s",tag.Data()));
+    Save(true,true,false,"data","",Form("FITPARAMETERS%s",tag.Data()));
 }
 
 void LKDrawingGroup::WriteFile(TString fileName, TString option)
@@ -93,7 +93,7 @@ void LKDrawingGroup::WriteFile(TString fileName, TString option)
     if (option=="flat")
     {
         if (fileName.IsNull())
-            fileName = Form("data_lilak/%s.flat.root",fName.Data());
+            fileName = Form("data/%s.flat.root",fName.Data());
         cout << "Writting" << endl;
         cout << "    " << fileName << endl;
         auto file = new TFile(fileName,"recreate");
@@ -101,7 +101,7 @@ void LKDrawingGroup::WriteFile(TString fileName, TString option)
     }
     else {
         if (fileName.IsNull())
-            fileName = Form("data_lilak/%s.root",fName.Data());
+            fileName = Form("data/%s.root",fName.Data());
         cout << "Writting" << endl;
         cout << "    " << fileName << endl;
         auto file = new TFile(fileName,"recreate");
@@ -187,7 +187,7 @@ void LKDrawingGroup::Browse(TBrowser *b)
 void LKDrawingGroup::Save(bool recursive, bool saveRoot, bool saveImage, TString dirName, TString header, TString tag)
 {
     if (dirName.IsNull()) {
-        dirName = "data_lilak";
+        dirName = "data";
     }
     if (fName.IsNull()) {
         fName = "top";

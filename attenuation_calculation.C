@@ -3,13 +3,13 @@
 void attenuation_calculation()
 {
     int constant, exponent;
-    double hole_diameter, beam_diameter;
+    double hole_diameter, beam_radius;
     vector<AttenuatorSimulationInput> attenuator_list = {
-        //AttenuatorSimulationInput(constant=1, exponent=-3, hole_diameter=0.12, beam_diameter=5),
-        AttenuatorSimulationInput(constant=1, exponent=-3, hole_diameter=0.12, beam_diameter=10),
-        //AttenuatorSimulationInput(constant=5, exponent=-3, hole_diameter=0.12, beam_diameter=5),
-        AttenuatorSimulationInput(constant=5, exponent=-3, hole_diameter=0.12, beam_diameter=10),
-        AttenuatorSimulationInput(constant=1, exponent=-5, hole_diameter=0.03, beam_diameter=10),
+        AttenuatorSimulationInput(constant=1, exponent=-3, hole_diameter=0.12, beam_radius=7),
+        AttenuatorSimulationInput(constant=1, exponent=-3, hole_diameter=0.12, beam_radius=10),
+        AttenuatorSimulationInput(constant=5, exponent=-3, hole_diameter=0.12, beam_radius=7),
+        AttenuatorSimulationInput(constant=5, exponent=-3, hole_diameter=0.12, beam_radius=10),
+        AttenuatorSimulationInput(constant=1, exponent=-5, hole_diameter=0.03, beam_radius=10),
     };
 
     /////////////////////////////////////////////////////////////////////
@@ -35,7 +35,7 @@ void attenuation_calculation()
 
     for (auto at : attenuator_list)
     {
-        auto drawings = top -> CreateGroup();
+        auto drawings = top -> CreateGroup(Form("c%d_e%d_h%d_b%d",at.constant,at.exponent,int(1000*at.hole_diameter),int(at.beam_radius)));
         drawings -> SetCanvasSize(500,500,true);
 
         double beam_sigma = at.beam_radius*beam_radius_to_sigma;
@@ -278,4 +278,5 @@ void attenuation_calculation()
     }
 
     top -> Draw();
+    top -> Save();
 }
